@@ -21,7 +21,7 @@
 <br />
 
 ## Author: 
-* [Filipe Matias](https://github.com/filipematias23)
+[Filipe Matias](https://github.com/filipematias23)
 
 <br />
 
