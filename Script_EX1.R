@@ -6,7 +6,11 @@
 ### Packages ### 
 ################
 
+devtools::install_github("OpenDroneMap/FIELDimageR", dependencies=FALSE)
+devtools::install_github("filipematias23/FIELDimageR.Extra", dependencies=FALSE)
+
 library(FIELDimageR)
+library(FIELDimageR.Extra)
 library(raster)
 library(agricolae)
 library(reshape2)
@@ -28,14 +32,15 @@ DSM<-list.files("./DSM/")
 ###################
 
 # Uploading an example mosaic
-Test <- stack(paste("./MOSAIC/",MOSAIC[3],sep = ""))
+# Test <- stack(paste("./MOSAIC/",MOSAIC[3],sep = ""))
+Test <- rast(paste("./MOSAIC/",MOSAIC[3],sep = ""))
 
 # Cropping and reducing siza
 Test.Crop <- fieldCrop(mosaic = Test)
 
 # Rotating field
-Test.Rotate<-fieldRotate(Test.Crop, theta = 2.3)
-#Test.Rotate<-fieldRotate(Test.Crop, clockwise = F)
+# Test.Rotate<-fieldRotate(Test.Crop, theta = 2.3)
+# Test.Rotate<-fieldRotate(Test.Crop, clockwise = F)
 
 # Removing soil and making a mask
 Test.RemSoil<-fieldMask(Test.Rotate) 
@@ -60,11 +65,19 @@ Map<-rotate(rotate(Map))
 Map
 
 # Building the plot shapefile (ncols = 14 and nrows = 10)
-plotShape<-fieldShape(mosaic = Test.RemSoil$newMosaic, 
+
+# plotShape<-fieldShape(mosaic = Test.RemSoil$newMosaic, 
+#                       ncols = 14, 
+#                       nrows = 10, 
+#                       fieldData = Data, 
+#                       ID = "Plot", 
+#                       fieldMap = Map)
+
+plotShape<-fieldShape_render(mosaic = Test.RemSoil$newMosaic, 
                       ncols = 14, 
                       nrows = 10, 
                       fieldData = Data, 
-                      ID = "Plot", 
+                      PlotID = "Plot", 
                       fieldMap = Map)
 
 ##########################
@@ -80,12 +93,16 @@ Test.Indices<- fieldIndex(mosaic = Test.RemSoil$newMosaic,
 ### Extracting plot data ###
 ############################
 
-Test.Info<- fieldInfo(mosaic = Test.Indices[[c("NGRDI","BGI", "GLI","VARI","myIndex.1","myIndex.2")]],
-                      fieldShape = plotShape$fieldShape)
-Test.Info$fieldShape@data
+# Test.Info<- fieldInfo(mosaic = Test.Indices[[c("NGRDI","BGI", "GLI","VARI","myIndex.1","myIndex.2")]],
+#                       fieldShape = plotShape$fieldShape)
+# Test.Info$fieldShape@data
+# plot(Test.Indices$myIndex.2)
+# plot(plotShape$fieldShape,add=T)
 
-plot(Test.Indices$myIndex.2)
-plot(plotShape$fieldShape,add=T)
+Test.Info<- fieldInfo_extra(mosaic = Test.Indices,
+                      fieldShape = plotShape)
+
+fieldView()
 
 ###############################
 ### Estimating plant height ###
