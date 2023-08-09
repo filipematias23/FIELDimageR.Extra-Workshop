@@ -25,6 +25,4 @@ install.packages('leafsync')
 install.packages('mapedit')
 install.packages("BiocManager")
 BiocManager::install("EBImage")
-devtools::install_github("OpenDroneMap/FIELDimageR", dependencies=FALSE)
-devtools::install_github("filipematias23/FIELDimageR.Extra", dependencies=FALSE)
 
