@@ -1,7 +1,7 @@
 # FIELDimageR.Extra Workshop Series : 
 
 <p align="center">
-<a href="https://github.com/OpenDroneMap/FIELDimageR"><img src="https://raw.githubusercontent.com/filipematias23/images/master/readme/FIELDimageR.jpg" width=60% height=60% title="Watch the video"></a>
+<a href="https://github.com/OpenDroneMap/FIELDimageR"><img src="https://raw.githubusercontent.com/filipematias23/images/master/readme/FIELDimageR_Extra.jpg" width=60% height=60% title="Watch the video"></a>
 </p>
 
 ## "FIELDimageR.Extra pipelines: Phenomics applied to Agriculture"
