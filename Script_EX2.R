@@ -6,7 +6,11 @@
 ### Packages ### 
 ################
 
+# devtools::install_github("OpenDroneMap/FIELDimageR", dependencies=FALSE)
+# devtools::install_github("filipematias23/FIELDimageR.Extra", dependencies=FALSE)
+
 library(FIELDimageR)
+library(FIELDimageR.Extra)
 library(raster)
 library(agricolae)
 library(reshape2)
@@ -15,24 +19,17 @@ library(lme4)
 library(plyr)
 library(DescTools)
 library(ggrepel)
+library(terra)
+library(mapview)
+library(leafsync)
 
 ## Uploading hyperspectral file with 474 bands (EX_HYP.tif):
-EX.HYP<- stack("EX_HYP.tif")
+EX.HYP<- rast("EX_HYP.tif")
 
 ## Wavelengths (namesHYP.csv):
 NamesHYP<- as.character(read.csv("namesHYP.csv")$NameHYP)
 names(EX.HYP)<- NamesHYP
 head(NamesHYP)
-
-# RGB from hyperspectral:
-R<- EX.HYP$X654.788879 # 654nm (Red)
-G<- EX.HYP$X552.598572 # 552nm (Green)
-B<- EX.HYP$X450.408295 # 450nm (Blue)
-RGB<- stack(c(R,G,B))
-plotRGB(RGB, stretch="lin")
-
-## Removing soil using RGB (index NGRDI):
-RGB.S<- fieldMask(RGB, index="NGRDI", cropValue = 0.0, cropAbove = F)
 
 ## Data frame with field information to make the Map:
 Data<- as.data.frame(read.csv("DataHYP.csv"))
@@ -43,38 +40,50 @@ Map<- fieldMap(fieldPlot = as.character(Data$Plot),
               fieldColumn = as.character(Data$Row), decreasing = T)
 Map
 
+# RGB from hyperspectral:
+R<- EX.HYP$'654.788879' # 654nm (Red)
+G<- EX.HYP$'552.598572' # 552nm (Green)
+B<- EX.HYP$'450.408295' # 450nm (Blue)
+RGB<- stack(c(R,G,B))
+plotRGB(RGB, stretch="lin")
+
 ## Building plot shapefile using RGB as base (14 columns and 14 rows):
-plotFile<- fieldShape(RGB.S, ncols = 14, nrows = 14, 
-                     fieldMap = Map, fieldData = Data, ID = "Plot")
-# plotFile<- fieldShape(RGB, ncols = 14, nrows = 14, 
-#                       fieldMap = Map, fieldData = Data, ID = "Plot")
 
-## Removing soil from the hyperspectral:
-# EX.HYP.S<- fieldMask(EX.HYP,mask = RGB.S$mask, plot = F)
-# writeRaster(EX.HYP.S$newMosaic, filename="EX_HYP_S.tif", options="INTERLEAVE=BAND", overwrite=TRUE)
-EX.HYP.S<- stack("EX_HYP_S.tif")
-names(EX.HYP.S)<- NamesHYP
-plot(EX.HYP.S$X750.592224, col=grey(100:1/100), axes=FALSE, box=FALSE)
-plot(plotFile$fieldShape, add=T)
+# x11()
+# plotFile<- fieldShape(RGB,ncols = 14,nrows = 14, 
+#                              fieldMap = Map, 
+#                              fieldData = Data, 
+#                              ID = "Plot")
+# st_write(st_as_sf(plotFile$fieldShape),"Grid_HYP.shp")
 
-## Reducing resolution to accelerate data extraction por plot (e.g., average values):
-EX.HYP.S<- aggregate(EX.HYP.S, 2)
-plot(EX.HYP.S$X750.592224, col=grey(100:1/100), axes=FALSE, box=FALSE)
-plot(plotFile$fieldShape, add=T)
+plotFile<- fieldShape_render(RGB, 
+                             ncols = 14, 
+                             nrows = 14, 
+                     fieldMap = Map, 
+                     fieldData = Data, 
+                     PlotID = "Plot")
+
+plotFile<-st_read("Grid_HYP.shp")
+
+fieldView(EX.HYP$'405.700073',
+          plotFile,
+          type = 2,
+          alpha_grid = 0.2)
 
 ## Extracting data (474 bands):
-EX.HYP.I<- fieldInfo(EX.HYP.S, # EX.HYP.S$newMosaic, 
-                    fieldShape = plotFile$fieldShape)
+EX.HYP.I<- fieldInfo_extra(EX.HYP,
+                    fieldShape = plotFile)
 
 ## Saving the new csv with hyperspectral information per plot:
-DataHYP<- EX.HYP.I$fieldShape@data
+DataHYP<- as.data.frame(EX.HYP.I)[,!colnames(EX.HYP.I)%in%c("ID.1","geometry")] # Removing column ("ID.1")
+
 colnames(DataHYP)<- c(colnames(DataHYP)[1:9], NamesHYP)
 DataHYP[1:5, 1:12]
 # write.csv(DataHYP,"DataHypNew.csv",col.names = T,row.names = F)
 
 ## Visualizing the extracted data from FIELDimageR:
 dev.off()
-DataHYP1<- EX.HYP.I$plotValue[,-1]
+DataHYP1<- DataHYP[,NamesHYP]
 
 ## Plotting the data:
 plot(x=as.numeric(NamesHYP), y=as.numeric(DataHYP1[1,]), type = "l",
