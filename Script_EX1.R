@@ -6,8 +6,8 @@
 ### Packages ### 
 ################
 
-devtools::install_github("OpenDroneMap/FIELDimageR", dependencies=FALSE)
-devtools::install_github("filipematias23/FIELDimageR.Extra", dependencies=FALSE)
+# devtools::install_github("OpenDroneMap/FIELDimageR", dependencies=FALSE)
+# devtools::install_github("filipematias23/FIELDimageR.Extra", dependencies=FALSE)
 
 library(FIELDimageR)
 library(FIELDimageR.Extra)
@@ -19,6 +19,9 @@ library(lme4)
 library(plyr)
 library(DescTools)
 library(ggrepel)
+library(terra)
+library(mapview)
+library(leafsync)
 
 ############
 ### Data ###
@@ -32,18 +35,7 @@ DSM<-list.files("./DSM/")
 ###################
 
 # Uploading an example mosaic
-# Test <- stack(paste("./MOSAIC/",MOSAIC[3],sep = ""))
 Test <- rast(paste("./MOSAIC/",MOSAIC[3],sep = ""))
-
-# Cropping and reducing siza
-Test.Crop <- fieldCrop(mosaic = Test)
-
-# Rotating field
-# Test.Rotate<-fieldRotate(Test.Crop, theta = 2.3)
-# Test.Rotate<-fieldRotate(Test.Crop, clockwise = F)
-
-# Removing soil and making a mask
-Test.RemSoil<-fieldMask(Test.Rotate) 
 
 ##################
 ### Shape file ###
@@ -66,144 +58,138 @@ Map
 
 # Building the plot shapefile (ncols = 14 and nrows = 10)
 
-# plotShape<-fieldShape(mosaic = Test.RemSoil$newMosaic, 
-#                       ncols = 14, 
-#                       nrows = 10, 
-#                       fieldData = Data, 
-#                       ID = "Plot", 
-#                       fieldMap = Map)
-
-plotShape<-fieldShape_render(mosaic = Test.RemSoil$newMosaic, 
+plotShape<-fieldShape_render(mosaic = Test, 
                       ncols = 14, 
                       nrows = 10, 
                       fieldData = Data, 
                       PlotID = "Plot", 
-                      fieldMap = Map)
+                      fieldMap = Map,
+                      buffer = -0.05)
+
+# Vizualizing new plot grid shape object with field data:
+fieldView(mosaic = Test,
+          fieldShape = plotShape,
+          type = 2,
+          alpha = 0.2)
+
+# Editing plot grid shapefile:
+plotShape<- fieldShape_edit(mosaic=Test,
+                            fieldShape=plotShape)
+
+# Checking the edited plot grid shapefile:
+fieldView(mosaic = Test,
+          fieldShape = plotShape,
+          type = 2,
+          alpha = 0.2)
 
 ##########################
 ### Vegetation indices ###
 ##########################
 
-Test.Indices<- fieldIndex(mosaic = Test.RemSoil$newMosaic, 
+Test.Indices<- fieldIndex(mosaic = Test, 
                          Red = 1, Green = 2, Blue = 3, 
                          index = c("NGRDI","BGI", "GLI","VARI"), 
                          myIndex = c("(Red-Blue)/Green","2*Green/Blue"))
+
+#######################################
+### Removing soil and making a mask ###
+#######################################
+
+Test.kmean<-fieldKmeans(mosaic=Test.Indices,
+                        clusters = 3)
+fieldView(Test.kmean)
+
+# Check which cluster is related to plants or soil based on the color. 
+rgb<-fieldView(Test)
+plants<-fieldView(Test.kmean==2)
+sync(rgb,plants)
+
+# Soil Mask (cluster 2) to remove soil effect from the mosaic using FIELDimageR::fieldMask :
+mask<-Test.kmean==2
+Test.RemSoil<-fieldMask(Test.Indices,
+                        mask = mask,
+                        cropValue = 1,
+                        cropAbove = F) 
+
+fieldView(Test.RemSoil$newMosaic,
+          fieldShape = plotShape,
+          type = 2,
+          alpha_grid = 0.2)
 
 ############################
 ### Extracting plot data ###
 ############################
 
-# Test.Info<- fieldInfo(mosaic = Test.Indices[[c("NGRDI","BGI", "GLI","VARI","myIndex.1","myIndex.2")]],
-#                       fieldShape = plotShape$fieldShape)
-# Test.Info$fieldShape@data
-# plot(Test.Indices$myIndex.2)
-# plot(plotShape$fieldShape,add=T)
-
-Test.Info<- fieldInfo_extra(mosaic = Test.Indices,
+Test.Info<- fieldInfo_extra(mosaic = Test.RemSoil$newMosaic,
                       fieldShape = plotShape)
 
-fieldView()
+fieldView(Test.RemSoil$newMosaic,
+          fieldShape = Test.Info,
+          plotCol = "Trait",
+          type = 2,
+          alpha_grid = 0.7)
 
 ###############################
 ### Estimating plant height ###
 ###############################
 
 # Uploading files from soil base and vegetative growth:
-DSM0 <- stack(paste("./DSM/",DSM[1],sep = ""))
-DSM1 <- stack(paste("./DSM/",DSM[3],sep = ""))
-
-# Cropping the image using the previous shape from step 2:
-DSM0.Crop <- fieldCrop(mosaic = DSM0,fieldShape = Test.Crop)
-DSM1.Crop <- fieldCrop(mosaic = DSM1,fieldShape = Test.Crop)
+DSM0 <- rast(paste("./DSM/",DSM[1],sep = ""))
+DSM1 <- rast(paste("./DSM/",DSM[3],sep = ""))
 
 # Canopy Height Model (CHM):
-DSM0.R <- resample(DSM0.Crop, DSM1.Crop)
-CHM <- DSM1.Crop-DSM0.R
-plot(CHM)
+DSM0.R <- resample(DSM0, DSM1)
+CHM <- DSM1-DSM0.R
 
-# Rotating the image using the same theta from step 3:
-CHM.Rotate<-fieldRotate(CHM, theta = 2.3)
+fieldView(CHM,
+          fieldShape = Test.Info,
+          colorOptions = viridisLite::inferno,
+          type = 2,
+          alpha_grid = 0.05)
 
 # Removing the soil using mask from step 4:
-CHM.RemSoil <- fieldMask(CHM.Rotate, mask = Test.RemSoil$mask)
-
-# Observing EPH profile for 2 ranges:
-CHM.Draw <- fieldDraw(mosaic = CHM.Rotate,
-                            ndraw = 2)
-dev.off()
-par(mfrow=c(1,3))
-plot(x = CHM.Draw$Draw1$drawData$x-100230, 
-     y = CHM.Draw$Draw1$drawData$layer, 
-     type="l", col="red",lwd=1,ylim=c(0,1),
-     xlab="Distance (m)", ylab="EPH (m)")
-lines(x = CHM.Draw$Draw2$drawData$x-100230, 
-      y = CHM.Draw$Draw2$drawData$layer,
-      type="l", col="blue",lwd=1,add=T)
-
-plot(CHM.Rotate, col = grey(1:100/100), axes = FALSE, box = FALSE,legend=F)
-lines(CHM.Draw$Draw1$drawData$x,CHM.Draw$Draw1$drawData$y, type="l", col="red",lwd=2)
-lines(CHM.Draw$Draw2$drawData$x,CHM.Draw$Draw2$drawData$y, type="l", col="blue",lwd=2)
-
-plotRGB(Test.Rotate)
-lines(CHM.Draw$Draw1$drawData$x,CHM.Draw$Draw1$drawData$y, type="l", col="red",lwd=2)
-lines(CHM.Draw$Draw2$drawData$x,CHM.Draw$Draw2$drawData$y, type="l", col="blue",lwd=2)
+CHM.RemSoil <- fieldMask(CHM, mask = Test.RemSoil$mask)
 
 # Extracting the estimate plant height average (EPH):
-EPH <- fieldInfo(CHM.RemSoil$newMosaic, 
-                 fieldShape = Test.Info$fieldShape, 
-                 fun = "mean") #fun="quantile"
-EPH$plotValue
+EPH<-CHM.RemSoil$newMosaic
+names(EPH)<-"EPH"
+Test.Info <- fieldInfo_extra(mosaic = EPH, 
+                 fieldShape = Test.Info, 
+                 fun = mean) 
 
 ########################################
 ### Evaluating all mosaics in a loop ###
 ########################################
 
-# DataTotal<-NULL
-# for(i in 2:length(MOSAIC)){
-#   EX1 <- stack(paste("./MOSAIC/",MOSAIC[i],sep = ""))
-#   EX1.Crop <- fieldCrop(mosaic = EX1,
-#                     fieldShape = Test.Crop,
-#                     plot = F)
-#   EX1.Rotate<-fieldRotate(EX1.Crop,
-#                     theta = 2.3,
-#                     plot = F)
-#   EX1.RemSoil<-fieldMask(EX1.Rotate, plot = F)
-#   EX1.Indices<- fieldIndex(mosaic = EX1.RemSoil$newMosaic, 
-#                             Red = 1, Green = 2, Blue = 3, 
-#                             index = c("NGRDI","BGI", "GLI","VARI"), 
-#                             myIndex = c("(Red-Blue)/Green","2*Green/Blue"),
-#                             plot = F)
-#   EX1.Info<- fieldInfo(mosaic = EX1.Indices[[c("NGRDI","BGI", "GLI","VARI","myIndex.1","myIndex.2")]],
-#                         fieldShape = plotShape$fieldShape)
-#   DSM0 <- stack(paste("./DSM/",DSM[1],sep = ""))
-#   DSM1 <- stack(paste("./DSM/",DSM[i],sep = ""))
-#   DSM0.Crop <- fieldCrop(mosaic = DSM0,fieldShape = Test.Crop,plot = F)
-#   DSM1.Crop <- fieldCrop(mosaic = DSM1,fieldShape = Test.Crop,plot = F)
-#   DSM0.R <- resample(DSM0.Crop, DSM1.Crop)
-#   CHM <- DSM1.Crop-DSM0.R
-#   CHM.Rotate<-fieldRotate(CHM, theta = 2.3,plot = F)
-#   CHM.RemSoil <- fieldMask(CHM.Rotate, mask = EX1.RemSoil$mask,plot = F)
-#   EPH <- fieldInfo(CHM.RemSoil$newMosaic, 
-#                    fieldShape = EX1.Info$fieldShape, 
-#                    fun = "mean")
-#   DataTotal<-rbind(DataTotal,
-#                    data.frame(DAP=as.character(do.call(c,strsplit(MOSAIC[i],split = "_"))[2]),
-#                               EPH$fieldShape@data))
-#   # Making map plots
-#   fieldPlot(fieldShape=EPH$fieldShape,
-#             fieldAttribute="NGRDI", 
-#             mosaic=EX1.Rotate, 
-#             color=c("red","green"),
-#             # min.lim = 0,
-#             # max.lim = 0.35,
-#             alpha = 0.5,
-#             round = 2)
-#   print(paste("### Completed: ", "Mosaic_",i," ###",sep=""))
-#   }
-# 
-# colnames(DataTotal)<-c(colnames(DataTotal)[-c(dim(DataTotal)[2])],"EPH") # layer=EPH
-# DataTotal<-DataTotal[,!colnames(DataTotal)%in%c("ID","ID.1","PlotName")] # Removing column 12 ("ID.1")
-# write.csv(DataTotal,"DataTotal.csv",row.names = F,col.names = T)
+DataTotal<-NULL
+for(i in 2:length(MOSAIC)){
+  EX1 <- rast(paste("./MOSAIC/",MOSAIC[i],sep = ""))
+  EX1.RemSoil<-fieldMask(EX1, plot = F)
+  EX1.Indices<- fieldIndex(mosaic = EX1.RemSoil$newMosaic,
+                            Red = 1, Green = 2, Blue = 3,
+                            index = c("NGRDI","BGI", "GLI","VARI"),
+                            myIndex = c("(Red-Blue)/Green","2*Green/Blue"),
+                            plot = F)
+  EX1.Info<- fieldInfo_extra(mosaic = EX1.Indices[[c("NGRDI","BGI", "GLI","VARI","myIndex.1","myIndex.2")]],
+                        fieldShape = plotShape)
+  DSM0 <- rast(paste("./DSM/",DSM[1],sep = ""))
+  DSM1 <- rast(paste("./DSM/",DSM[i],sep = ""))
+  DSM0.R <- resample(DSM0, DSM1)
+  CHM <- DSM1-DSM0.R
+  CHM.RemSoil <- fieldMask(CHM, mask = EX1.RemSoil$mask,plot = F)
+  EPH<-CHM.RemSoil$newMosaic
+  names(EPH)<-"EPH"
+  EX1.Info <- fieldInfo_extra(EPH,
+                   fieldShape = EX1.Info,
+                   fun = "mean")
+  DataTotal<-rbind(DataTotal,
+                   data.frame(DAP=as.character(do.call(c,strsplit(MOSAIC[i],split = "_"))[2]),
+                              EX1.Info))
+  print(paste("### Completed: ", "Mosaic_",i," ###",sep=""))
+  }
+
+DataTotal<-DataTotal[,!colnames(DataTotal)%in%c("ID","ID.1","PlotID","geometry")] # Removing column 12 ("ID.1")
+#write.csv(DataTotal,"DataTotal.csv",row.names = F,col.names = T)
 
 DataTotal<-read.csv("DataTotal.csv",header = T)
 DataTotal
