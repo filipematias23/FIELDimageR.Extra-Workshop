@@ -6,6 +6,7 @@
 ### Packages ### 
 ################
 
+library(spatialEco)
 library(FIELDimageR)
 library(raster)
 library(ggplot2)
@@ -127,7 +128,7 @@ dev.off()
 EX3.D<-fieldObject(mosaic = EX3.R$mask, 
                    watershed = T, 
                    minArea = 200,
-                   perimeter = T)
+                   perimeter = F)
 
 # Measurement Output:
 EX3.D$numObjects
@@ -152,7 +153,7 @@ Data.Obj<-cbind.data.frame(EX3.Data$fieldShape@data,EX3.D$Dimension)
 Data.Obj
 
 # Data visualization: 
-Data.Obj1<-melt(Data.Obj[,c("SI","BGI","BI","VARI","area","x.dist","y.dist","perimeter","box")])
+Data.Obj1<-melt(Data.Obj[,c("SI","BGI","BI","VARI","area","x.dist","y.dist")])
 
 ggplot(Data.Obj1, aes(x=value, fill=variable)) +
   geom_histogram(aes(y=..density..), colour="black")+
